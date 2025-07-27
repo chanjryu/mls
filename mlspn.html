@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>MLS材料編號建立管制系統</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 30px; background-color: #fff; padding-bottom: 70px; }
+    .hidden { display: none; }
+    .tabs, .toolbar, .content-section { margin-top: 20px; }
+    .tabs { display: flex; border-bottom: 2px solid #ccc; margin-bottom: 15px; background: #fff; }
+    .tab { padding: 10px 20px; border: 1px solid #ccc; border-bottom: none; background-color: #eee; cursor: pointer; margin-right: 5px; user-select:none; }
+    .tab.active { background-color: white; font-weight: bold; border-top: 3px solid #000; }
+    .tab.disabled, .tab[disabled] {
+      background-color: #eee !important; color: #aaa !important; cursor: not-allowed !important;
+      pointer-events: none;
+      border-top: 3px solid #eee !important;
+      opacity: 0.7;
+    }
+    table { width: 100%; border-collapse: collapse; background-color: white; }
+    th, td { border: 1px solid #ccc; padding: 10px; vertical-align: top; text-align: center; }
+    th { background-color: #f2f2f2; }
+    .input-group { margin: 20px 0; font-size: 16px; }
+    .input-group label { margin-right: 10px; }
+    .input-group input, .input-group select { width: 200px; padding: 5px; margin-right: 20px; }
+    .save-btn, .review-btn { margin-top: 20px; padding: 6px 12px; font-size: 14px; border: 1px solid #ccc; background-color: white; cursor: pointer; width: auto; min-width: 60px; }
+    .review-btn { margin: 0; background: #2196f3; color: #fff; border-radius: 4px;}
+    .progress-container { width: 100%; background-color: #eee; border: 1px solid #ccc; margin: 10px 0; height: 20px; display: none; }
+    .progress-bar { height: 100%; width: 0%; background-color: #2196f3; transition: width 0.2s ease; }
+    .user-info { position: absolute; top: 18px; right: 40px; font-size: 15px; color: #555; z-index: 10; background: #f6f6f6; padding: 2px 14px; border-radius: 16px; box-shadow: 0 1px 6px #eee; }
+    #logoutBtn { margin-left:10px;padding:3px 18px;font-size:14px;cursor:pointer;background:#2196f3;color:#fff;border:none;border-radius:6px;}
+    #loginSection { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60vh; }
+    #loginSection label { min-width: 60px; }
+    #loginSection button { width: auto; min-width: 60px; padding: 8px 26px; margin-top: 8px; font-size: 16px; border: 1px solid #bbb; border-radius: 4px; background: #fafafa; cursor: pointer; }
+    .footer-warning { width: 100%; color: #1565c0; text-align: center; font-size: 16px; padding: 28px 8px 12px 8px; position: fixed; left: 0; bottom: 0; background: #fff; z-index: 999; border-top: 1px solid #e0e0e0; box-shadow: 0 -2px 12px #f0f4ff44; letter-spacing: 0.02em; }
+    .upload-progress { font-size: 14px; color: #1565c0; margin-top: 5px; }
+    .error-msg { color: #e53935; font-size: 15px; margin: 6px 0 2px 15px; min-height: 20px; display:inline-block; vertical-align: middle;}
+    .toolbar { display: flex; align-items: center; }
+  </style>
+</head>
+<body>
+  <div id="loginSection">
+    <h2>MLS材料編號建立管制系統</h2>
+    <div class="input-group"><label>帳號：</label><input type="text" id="loginUser" /></div>
+    <div class="input-group"><label>密碼：</label><input type="password" id="loginPass" /></div>
+    <button onclick="checkLogin()">登入</button>
+    <div class="error-msg" id="loginError"></div>
+  </div>
+
+  <div id="mainApp" class="hidden">
+    <div class="user-info" id="userInfo">
+      <span id="userText"></span>
+      <button id="logoutBtn" onclick="logout()">登出</button>
+    </div>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('materialStatus', event)">材料核准狀況</div>
+      <div class="tab" onclick="switchTab('partRequest', event)">零件料號申請</div>
+      <div class="tab disabled" id="tab_attachment" onclick="switchTab('attachment', event)">附件上傳</div>
+      <div class="tab disabled" id="tab_componentInfo" onclick="switchTab('componentInfo', event)">元件基本資料</div>
+    </div>
+
+    <div class="toolbar" id="uploadToolbar">
+      <button onclick="startUploadProgress()">上傳簽核</button>
+      <div class="progress-container" id="progressContainer">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <div class="error-msg" id="uploadError"></div>
+    </div>
+
+    <div id="materialStatus" class="content-section">
+      <h3>材料核准狀況清單</h3>
+      <table id="materialStatusTable">
+        <thead>
+          <tr>
+            <th>新增時間</th>
+            <th>料號</th>
+            <th>元件類型</th>
+            <th>描述</th>
+            <th>供應商</th>
+            <th>審核狀況</th>
+            <th id="reviewActionHeader" class="hidden">審核操作</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="partRequest" class="content-section hidden">
+      <div class="input-group">
+        <label>元件類型：</label>
+        <select id="reqType">
+          <option value="">請選擇</option>
+          <option>銅片類</option>
+          <option>銅網類</option>
+          <option>銅粉類</option>
+          <option>銅條類</option>
+          <option>穿孔柱類</option>
+          <option>銅管類</option>
+          <option>熱管類</option>
+          <option>銅鰭片類</option>
+          <option>鋁板類</option>
+          <option>銅板類</option>
+          <option>板金類</option>
+          <option>五金類</option>
+          <option>固定架</option>
+          <option>風扇類</option>
+          <option>焊料類</option>
+          <option>錫膏類</option>
+          <option>導熱膏</option>
+          <option>PAD</option>
+          <option>包材類</option>
+          <option>包裝袋</option>
+          <option>標籤</option>
+          <option>物料/耗材類</option>
+        </select>
+      </div>
+      <div class="input-group"><label>描述：</label><input type="text" id="reqDesc"></div>
+      <div class="input-group"><label>供應商：</label><input type="text" id="reqSupplier"></div>
+      <button class="save-btn" onclick="savePart()">保存</button>
+      <p id="reqResult" style="color: green;"></p>
+    </div>
+
+    <div id="attachment" class="content-section hidden">
+      <table id="attachmentTable">
+        <thead>
+          <tr><th>元件類型</th><th>描述</th><th>供應商</th><th>圖面上傳</th><th>材質證明上傳</th><th>可靠度報告上傳</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div id="componentInfo" class="content-section hidden">
+      <div class="input-group">
+        <label>長 (mm):</label><input type="number" id="length">
+        <label>寬 (mm):</label><input type="number" id="width">
+        <label>高 (mm):</label><input type="number" id="height">
+      </div>
+      <button class="save-btn" onclick="saveDimensions()">保存</button>
+      <p id="saveResult" style="color: green;"></p>
+    </div>
+  </div>
+
+  <div class="footer-warning">
+    本系統屬研發機敏網站，非授權員工禁止將網址及內容對外展示、公開。<br>
+    This system is a confidential R&D website. Unauthorized personnel are strictly prohibited from sharing or disclosing its URL or content to external parties.
+  </div>
+
+  <script>
+    let savedPart = null, currentUser = "", isAdmin = false;
+    let isTabEnabled = false;
+    let componentSaved = false;
+
+    const USERS = [
+      { user: "10682", pass: "10682", admin: false },
+      { user: "admin", pass: "adm!n123", admin: true }
+    ];
+
+    const prefixMap = {
+      "銅片類": "04","銅網類": "07","銅粉類": "08","銅條類": "10",
+      "穿孔柱類": "13","銅管類": "16","熱管類": "17","銅鰭片類": "19",
+      "鋁板類": "30","銅板類": "31","板金類": "35","五金類": "40",
+      "固定架": "41","風扇類": "42","焊料類": "50","錫膏類": "51",
+      "導熱膏": "52","PAD": "53","包材類": "54","包裝袋": "55",
+      "標籤": "56","物料/耗材類": "58"
+    };
+
+    function showUserInfo() {
+      document.getElementById('userText').textContent = `使用者：(${currentUser})`;
+      document.getElementById('logoutBtn').style.display = 'inline-block';
+    }
+
+    function checkLogin() {
+      document.getElementById('loginError').textContent = '';
+      const u = document.getElementById('loginUser').value;
+      const p = document.getElementById('loginPass').value;
+      const found = USERS.find(uinfo => uinfo.user === u && uinfo.pass === p);
+      if (found) {
+        document.getElementById('loginSection').style.display='none';
+        document.getElementById('mainApp').classList.remove('hidden');
+        currentUser = u;
+        isAdmin = found.admin;
+        isTabEnabled = false;
+        componentSaved = false;
+        updateTabStatus();
+        updateToolbarVisibility();
+        showUserInfo();
+        loadMaterialStatusList(false);
+      } else {
+        document.getElementById('loginError').textContent = '帳號或密碼錯誤';
+      }
+    }
+
+    function logout() {
+      localStorage.removeItem('materialStatusData');
+      document.getElementById('mainApp').classList.add('hidden');
+      document.getElementById('loginSection').style.display='flex';
+      document.getElementById('loginUser').value = '';
+      document.getElementById('loginPass').value = '';
+      document.getElementById('loginError').textContent = '';
+      savedPart = null;
+      isTabEnabled = false;
+      componentSaved = false;
+      document.getElementById('uploadError').textContent = '';
+    }
+
+    function switchTab(tabId, e) {
+      document.getElementById('uploadError').textContent = '';
+      if ((tabId === "attachment" || tabId === "componentInfo") && !isTabEnabled) return;
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      e.target.classList.add('active');
+      document.querySelectorAll('.content-section').forEach(sec => sec.classList.add('hidden'));
+      document.getElementById(tabId).classList.remove('hidden');
+      updateToolbarVisibility();
+    }
+
+    function updateTabStatus() {
+      document.getElementById('tab_attachment').classList.toggle('disabled', !isTabEnabled);
+      document.getElementById('tab_componentInfo').classList.toggle('disabled', !isTabEnabled);
+    }
+
+    function updateToolbarVisibility() {
+      const curr = document.querySelector('.tab.active').textContent;
+      document.getElementById('uploadToolbar').style.display = curr === '材料核准狀況' ? 'none' : 'flex';
+    }
+
+    function addUploadProgressToAttachmentTable() {
+      const tb = document.getElementById('attachmentTable').tBodies[0];
+      if (!tb || !tb.rows.length) return;
+      const row = tb.rows[0];
+      for (let i = 3; i < 6; i++) {
+        const cell = row.cells[i];
+        let progressSpan = cell.querySelector('.upload-progress');
+        if (!progressSpan) {
+          progressSpan = document.createElement('div');
+          progressSpan.className = 'upload-progress';
+          progressSpan.style.fontSize = '14px';
+          progressSpan.style.color = '#1565c0';
+          progressSpan.style.marginTop = '5px';
+          cell.appendChild(progressSpan);
+        }
+        const fileInput = cell.querySelector('input[type=file]');
+        fileInput.onchange = () => {
+          progressSpan.textContent = "0";
+          let val = 0;
+          if (fileInput._interval) clearInterval(fileInput._interval);
+          fileInput._interval = setInterval(() => {
+            val += 5;
+            if (val < 100) {
+              progressSpan.textContent = val + "";
+            } else {
+              clearInterval(fileInput._interval);
+              progressSpan.textContent = "檔案上傳完成";
+            }
+          }, 30);
+        };
+      }
+    }
+
+    function savePart() {
+      const type = document.getElementById('reqType').value,
+            desc = document.getElementById('reqDesc').value,
+            sup = document.getElementById('reqSupplier').value;
+      savedPart = null;
+      document.getElementById('reqResult').textContent = '';
+      if (!type || !desc || !sup) {
+        return;
+      }
+      savedPart = { type, desc, sup };
+      document.getElementById('reqResult').textContent = '已儲存！請上傳附件。';
+      const tb = document.getElementById('attachmentTable').tBodies[0];
+      tb.innerHTML = '';
+      const r = tb.insertRow();
+      r.insertCell().textContent = type;
+      r.insertCell().textContent = desc;
+      r.insertCell().textContent = sup;
+      for (let i = 0; i < 3; i++) {
+        const c = r.insertCell();
+        const inp = document.createElement('input');
+        inp.type = 'file';
+        c.appendChild(inp);
+      }
+      isTabEnabled = true;
+      updateTabStatus();
+      componentSaved = false;
+      document.getElementById('saveResult').textContent = '';
+      document.getElementById('length').value = '';
+      document.getElementById('width').value = '';
+      document.getElementById('height').value = '';
+      addUploadProgressToAttachmentTable();
+    }
+
+    function saveDimensions() {
+      document.getElementById('saveResult').textContent = '';
+      const l = document.getElementById('length').value;
+      const w = document.getElementById('width').value;
+      const h = document.getElementById('height').value;
+      if (!l||!w||!h) {
+        return;
+      }
+      document.getElementById('saveResult').textContent = '尺寸已儲存！';
+      componentSaved = true;
+    }
+
+    function startUploadProgress() {
+      document.getElementById('uploadError').textContent = '';
+      const files = [...document.querySelectorAll('#attachmentTable input[type=file]')];
+      if (files.length < 3 || files.some(f => !f.value)) {
+        document.getElementById('uploadError').textContent = '請上傳三項所需資料';
+        return;
+      }
+      const l = document.getElementById('length').value;
+      const w = document.getElementById('width').value;
+      const h = document.getElementById('height').value;
+      if (!l || !w || !h) {
+        document.getElementById('uploadError').textContent = '請輸入元件基本資料（長、寬、高）';
+        return;
+      }
+      if (!componentSaved) {
+        document.getElementById('uploadError').textContent = '請先在元件基本資料頁面按下「保存」！';
+        return;
+      }
+      document.getElementById('uploadError').textContent = '';
+      const bar = document.getElementById('progressBar'),
+            cont = document.getElementById('progressContainer');
+      let wBar = 0;
+      bar.style.width = '0%';
+      cont.style.display = 'block';
+      const iv = setInterval(() => {
+        if (wBar >= 100) {
+          clearInterval(iv);
+          cont.style.display = 'none';
+          showMaterialStatusList();
+        } else {
+          wBar += 5;
+          bar.style.width = wBar + '%';
+        }
+      }, 100);
+    }
+
+    function showMaterialStatusList() {
+      const type = savedPart.type;
+      const prefix = prefixMap[type] || "XX";
+      const randomCode = Math.floor(100000 + Math.random()*900000);
+      const now = new Date();
+      const timeString = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,0)}/${String(now.getDate()).padStart(2,0)} ${String(now.getHours()).padStart(2,0)}:${String(now.getMinutes()).padStart(2,0)}`;
+      const partNumber = `${prefix}-${randomCode}-000-HF`;
+      const rec = {
+        partNumber, type, desc: savedPart.desc, supplier: savedPart.sup,
+        status: '送簽中，料號未建立', time: timeString
+      };
+      const data = JSON.parse(localStorage.getItem('materialStatusData') || '[]');
+      data.push(rec);
+      localStorage.setItem('materialStatusData', JSON.stringify(data));
+      ['reqType','reqDesc','reqSupplier','length','width','height'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('reqResult').textContent = '';
+      document.getElementById('saveResult').textContent = '';
+      document.getElementById('attachmentTable').tBodies[0].innerHTML = '';
+      isTabEnabled = false;
+      componentSaved = false;
+      updateTabStatus();
+      loadMaterialStatusList(false);
+      switchTab('materialStatus', { target: document.querySelector('.tab') });
+    }
+
+    function renderReviewActionHeader(show) {
+      document.getElementById('reviewActionHeader').classList.toggle('hidden', !show);
+    }
+
+    function loadMaterialStatusList(onlyUpgrade=false) {
+      const data = JSON.parse(localStorage.getItem('materialStatusData') || '[]');
+      const tb = document.getElementById('materialStatusTable').tBodies[0];
+      tb.innerHTML = '';
+      data.slice().reverse().forEach((item, idx) => {
+        const r = tb.insertRow();
+        r.insertCell().textContent = item.time || "";
+        r.insertCell().textContent = item.partNumber || "";
+        r.insertCell().textContent = item.type || "";
+        r.insertCell().textContent = item.desc || "";
+        r.insertCell().textContent = item.supplier || "";
+        r.insertCell().textContent = item.status || "";
+        if(isAdmin) {
+          const c = r.insertCell();
+          if(item.status === '送簽中，料號未建立') {
+            const btn = document.createElement('button');
+            btn.textContent = "審核完成";
+            btn.className = "review-btn";
+            btn.onclick = () => {
+              item.status = "審核通過，已建立料號";
+              localStorage.setItem('materialStatusData', JSON.stringify(data));
+              loadMaterialStatusList(false);
+            };
+            c.appendChild(btn);
+          } else {
+            c.textContent = '-';
+          }
+        }
+      });
+      renderReviewActionHeader(isAdmin);
+    }
+
+    window.addEventListener('load', () => loadMaterialStatusList(false));
+  </script>
+</body>
+</html>
