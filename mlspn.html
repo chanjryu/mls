@@ -22,8 +22,9 @@
     .input-group { margin: 20px 0; font-size: 16px; }
     .input-group label { margin-right: 10px; }
     .input-group input, .input-group select { width: 200px; padding: 5px; margin-right: 20px; }
-    .save-btn, .review-btn { margin-top: 20px; padding: 6px 12px; font-size: 14px; border: 1px solid #ccc; background-color: white; cursor: pointer; width: auto; min-width: 60px; }
+    .save-btn, .review-btn, .cancel-btn { margin-top: 20px; padding: 6px 12px; font-size: 14px; border: 1px solid #ccc; background-color: white; cursor: pointer; width: auto; min-width: 60px; }
     .review-btn { margin: 0; background: #2196f3; color: #fff; border-radius: 4px;}
+    .cancel-btn { margin: 0; background: #fff; color: #e53935; border: 1px solid #e53935; border-radius: 4px;}
     .progress-container { width: 100%; background-color: #eee; border: 1px solid #ccc; margin: 10px 0; height: 20px; display: none; }
     .progress-bar { height: 100%; width: 0%; background-color: #2196f3; transition: width 0.2s ease; }
     .user-info { position: absolute; top: 18px; right: 40px; font-size: 15px; color: #555; z-index: 10; background: #f6f6f6; padding: 2px 14px; border-radius: 16px; box-shadow: 0 1px 6px #eee; }
@@ -78,6 +79,7 @@
             <th>供應商</th>
             <th>審核狀況</th>
             <th id="reviewActionHeader" class="hidden">審核操作</th>
+            <th>取消申請</th>
           </tr>
         </thead>
         <tbody></tbody>
@@ -190,7 +192,7 @@
     }
 
     function logout() {
-      localStorage.removeItem('materialStatusData');
+      // localStorage.removeItem('materialStatusData'); // 取消清除功能
       document.getElementById('mainApp').classList.add('hidden');
       document.getElementById('loginSection').style.display='flex';
       document.getElementById('loginUser').value = '';
@@ -366,10 +368,11 @@
     }
 
     function loadMaterialStatusList(onlyUpgrade=false) {
-      const data = JSON.parse(localStorage.getItem('materialStatusData') || '[]');
+      let data = JSON.parse(localStorage.getItem('materialStatusData') || '[]');
       const tb = document.getElementById('materialStatusTable').tBodies[0];
       tb.innerHTML = '';
       data.slice().reverse().forEach((item, idx) => {
+        const realIdx = data.length - 1 - idx; // 對應原始data的index
         const r = tb.insertRow();
         r.insertCell().textContent = item.time || "";
         r.insertCell().textContent = item.partNumber || "";
@@ -377,6 +380,7 @@
         r.insertCell().textContent = item.desc || "";
         r.insertCell().textContent = item.supplier || "";
         r.insertCell().textContent = item.status || "";
+        // 審核操作
         if(isAdmin) {
           const c = r.insertCell();
           if(item.status === '送簽中，料號未建立') {
@@ -384,7 +388,7 @@
             btn.textContent = "審核完成";
             btn.className = "review-btn";
             btn.onclick = () => {
-              item.status = "審核通過，已建立料號";
+              data[realIdx].status = "審核通過，已建立料號";
               localStorage.setItem('materialStatusData', JSON.stringify(data));
               loadMaterialStatusList(false);
             };
@@ -393,6 +397,19 @@
             c.textContent = '-';
           }
         }
+        // 取消申請
+        const cancelCell = r.insertCell();
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = "取消";
+        cancelBtn.className = "cancel-btn";
+        cancelBtn.onclick = () => {
+          if(confirm("確定要刪除此申請？")) {
+            data.splice(realIdx,1);
+            localStorage.setItem('materialStatusData', JSON.stringify(data));
+            loadMaterialStatusList(false);
+          }
+        };
+        cancelCell.appendChild(cancelBtn);
       });
       renderReviewActionHeader(isAdmin);
     }
