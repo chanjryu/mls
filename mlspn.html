@@ -153,7 +153,8 @@
 
     const USERS = [
       { user: "10682", pass: "10682", admin: false },
-      { user: "admin", pass: "adm!n123", admin: true }
+      { user: "10534", pass: "10534", admin: false },
+      { user: "admin", pass: "admin", admin: true }
     ];
 
     const prefixMap = {
@@ -306,7 +307,7 @@
       document.getElementById('uploadError').textContent = '';
       const files = [...document.querySelectorAll('#attachmentTable input[type=file]')];
       if (files.length < 3 || files.some(f => !f.value)) {
-        document.getElementById('uploadError').textContent = '請上傳三項所需資料';
+        document.getElementById('uploadError').textContent = '請上傳三項所需附件';
         return;
       }
       const l = document.getElementById('length').value;
